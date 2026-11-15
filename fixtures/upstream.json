@@ -1,0 +1,30 @@
+{
+  "catalog": {
+    "entry": "/recordings/with-analog",
+    "recordings": [
+      "/primary",
+      "/recordings/with-analog",
+      "/recordings/incompatible",
+      "/recordings/truncated"
+    ]
+  },
+  "resources": {
+    "/primary": {
+      "file": "primary.bin",
+      "type": "application/octet-stream"
+    },
+    "/recordings/with-analog": {
+      "file": "resource-01.bin",
+      "type": "application/octet-stream",
+      "chunkSize": 7
+    },
+    "/recordings/incompatible": {
+      "file": "resource-02.bin",
+      "type": "application/octet-stream"
+    },
+    "/recordings/truncated": {
+      "file": "resource-03.bin",
+      "type": "application/octet-stream"
+    }
+  }
+}
