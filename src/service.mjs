@@ -3,7 +3,25 @@ import { fileURLToPath } from 'node:url';
 import { Store } from './store.mjs';
 import { acquire } from './transport.mjs';
 import { inspect } from './reader.mjs';
+import { interpret } from './recording.mjs';
 import { startProvider } from './provider.mjs';
+
+async function readJson(request) {
+  const chunks = []; let length = 0;
+  for await (const chunk of request) {
+    length += chunk.length;
+    if (length > 16384) throw new Error('request_too_large');
+    chunks.push(chunk);
+  }
+  return JSON.parse(Buffer.concat(chunks).toString());
+}
+
+async function receive(source, store, payload, parse) {
+  if (typeof payload.path !== 'string') throw new Error('path_required');
+  const result = await acquire(source, payload.path);
+  const parsed = parse(result.bytes);
+  return store.accept(result.bytes, new URL(payload.path, source).href, parsed);
+}
 
 export async function startService({ source, directory, port = 0 }) {
   const store = await new Store(directory).initialize();
@@ -18,22 +36,20 @@ export async function startService({ source, directory, port = 0 }) {
         return response.end(await store.object(url.pathname.slice(9)));
       }
       if (url.pathname === '/intakes' && request.method === 'POST') {
-        const chunks = []; let length = 0;
-        for await (const chunk of request) {
-          length += chunk.length;
-          if (length > 16384) throw new Error('request_too_large');
-          chunks.push(chunk);
-        }
-        const payload = JSON.parse(Buffer.concat(chunks).toString());
-        if (typeof payload.path !== 'string') throw new Error('path_required');
-        const result = await acquire(source, payload.path);
-        const parsed = inspect(result.bytes);
-        const record = await store.accept(result.bytes, new URL(payload.path, source).href, parsed);
+        const record = await receive(source, store, await readJson(request), inspect);
+        response.statusCode = 201;
+        return response.end(JSON.stringify(record));
+      }
+      if (url.pathname === '/recordings' && request.method === 'POST') {
+        const record = await receive(source, store, await readJson(request), interpret);
         response.statusCode = 201;
         return response.end(JSON.stringify(record));
       }
       response.writeHead(404); response.end(JSON.stringify({ error: 'not_found' }));
-    } catch (error) { response.statusCode = 422; response.end(JSON.stringify({ error: error.message })); }
+    } catch (error) {
+      response.statusCode = 422;
+      response.end(JSON.stringify({ error: error.message, ...(error.detail ? { detail: error.detail } : {}) }));
+    }
   });
   await new Promise(resolve => server.listen(port, '127.0.0.1', resolve));
   return { server, store, url: `http://127.0.0.1:${server.address().port}`,

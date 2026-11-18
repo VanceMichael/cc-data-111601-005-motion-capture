@@ -25,9 +25,11 @@ export class Store {
   }
   async accept(bytes, source, parsed) {
     const digest = createHash('sha256').update(bytes).digest('hex');
+    const kind = parsed?.kind ?? null;
     const operation = this.pending.then(async () => {
       const records = await this.list();
-      const existing = records.find(record => record.digest === digest && record.source === source);
+      const existing = records.find(record => record.digest === digest && record.source === source
+        && (record.parsed?.kind ?? null) === kind);
       if (existing) return existing;
       await writeFile(join(this.directory, 'objects', digest), bytes);
       const record = { id: randomUUID(), digest, source, bytes: bytes.length, parsed };
